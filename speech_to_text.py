@@ -1,55 +1,62 @@
-# This program is good for small audio files
-
-import sys
 import speech_recognition as sr
+import keyboard
+import threading 
 
-# using google speech recognition as no api key is needed
+# keep track of stopping program 
+stop_recording = False
 
 def record_audio(recognizer):
-    # we want to loop continuously incase of errors
-    while (1):
-        try:
-            with sr.Microphone() as source:
-                # prepare the recognizer for ambient noises
-                recognizer.adjust_for_ambient_noise(source, duration=0.2)
+    global stop_recording
+    try:
+        with sr.Microphone() as source:
+            recognizer.adjust_for_ambient_noise(source, duration=0.2)
+            print("Listening...")
 
-                # listen for audio data to load into memory
-                audio_data = recognizer.listen(source)
+            # increased timeout and phrase_time_limit to 10 seconds
+            audio_data = recognizer.listen(source, timeout=10, phrase_time_limit=10)
+            text = recognizer.recognize_google(audio_data)
+            return text
 
-                # using the recognizer, we convert from speech to text
-                text = recognizer.recognize_google(audio_data)
+    except sr.RequestError as e:
+        print(f"Could not request results; {e}")
+        return None
 
-                # return text if all worked well
-                return text
+    except sr.UnknownValueError:
+        print("Could not understand the audio")
+        return None
 
-        except sr.RequestError as e:
-            print("Could not request any results; {0}".format(e))
-
-        except sr.UnknownValueError as e:
-            print("Unknown error occurred")
-
-
-    # return the generated text
-    return text
+    except KeyboardInterrupt:
+        print("Process interrupted by the user.")
+        return None
 
 def output_to_file(text):
-    # open the file (creates new if not exists), open in 'append' mode
-    file = open("text_output.txt", "a")
+    if text:
+        with open("text_output.txt", "a") as file:
+            file.write(text + "\n")
+        print("Wrote text to file")
 
-    file.write(text)
-    file.write("\n")
+def check_keypress():
+    global stop_recording
+    while not stop_recording:
+        if keyboard.is_pressed('y'):  
+            print("Stopping recording as per user request.")
+            stop_recording = True  # set global to true 
+            break  
 
-    # close access to the file
-    file.close()
-
-    print("Wrote text to file")
-
-
-# The main loop by which the program will continuously output to a file
 recognizer = sr.Recognizer()
 
-while (1):
-    text = record_audio(recognizer)
-    output_to_file(text)
+# start the key press listener thread
+keypress_thread = threading.Thread(target=check_keypress)
+#ensures thread dies 
+keypress_thread.daemon = True 
+#start thread again 
+keypress_thread.start()
 
-    print("Wrote text")
+# listens until the 'y' key is pressed
+while not stop_recording:
+    text = record_audio(recognizer)
+    if text:
+        output_to_file(text)
+        print("Wrote text")
+
+print("Program ended.")
